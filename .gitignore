@@ -1,0 +1,61 @@
+# 数据目录
+data/raw/
+data/preprocessed/
+data/splits/
+
+# 模型和结果
+results/models/*
+results/statistics/*
+results/visualizations/*
+!results/models/.gitkeep
+!results/statistics/.gitkeep
+!results/visualizations/.gitkeep
+
+# Python缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE相关文件
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志和临时文件
+*.log
+logs/
+temp/
+tmp/
+.ipynb_checkpoints/
+
+# 大型模型文件
+*.pth
+*.pt
+*.h5
+
+# 环境文件
+venv/
+env/
+.env

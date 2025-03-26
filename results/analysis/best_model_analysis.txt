@@ -1,0 +1,16 @@
+最佳小型肿瘤检测模型: small_tumor
+小型肿瘤 F1 分数: 0.6487
+小型肿瘤召回率: 0.5141
+小型肿瘤精确率: 0.8790
+
+各指标表现:
+Overall Dice: 0.7853
+Background Dice: 0.9967
+Liver Dice: 0.9199
+Tumor Dice: 0.7853
+Tumor Recall: 0.6571
+Tumor Precision: 0.8152
+Tumor F1: 0.7277
+Small Tumor Recall: 0.5141
+Small Tumor Precision: 0.8790
+Small Tumor F1: 0.6487

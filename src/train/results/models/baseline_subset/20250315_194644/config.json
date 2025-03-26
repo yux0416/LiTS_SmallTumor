@@ -1,0 +1,25 @@
+{
+  "data_dir": "D:\\Documents\\NUS\\BN5207\\20250315 - FinalProject\\LiTS_SmallTumor\\data\\preprocessed",
+  "subset_fraction": 0.1,
+  "batch_size": 8,
+  "num_workers": 2,
+  "img_size": [
+    256,
+    256
+  ],
+  "n_channels": 3,
+  "n_classes": 3,
+  "init_features": 16,
+  "use_light_model": true,
+  "num_epochs": 30,
+  "learning_rate": 0.0001,
+  "weight_decay": 1e-05,
+  "patience": 7,
+  "use_amp": true,
+  "dice_weight": 1.0,
+  "focal_weight": 1.0,
+  "boundary_weight": 0.5,
+  "size_weight": 1.0,
+  "save_dir": "results/models/baseline_subset",
+  "experiment_name": "20250315_194644"
+}
