@@ -17,6 +17,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from src.models.unet import UNet
 from src.models.attention_unet import get_attention_unet_model
 from dataloader import LiTSDataset, get_transforms
+from src.models.ensemble_model import create_ensemble
 
 
 def load_trained_models(models_dir, device, model_types=None):
@@ -96,6 +97,13 @@ def load_trained_models(models_dir, device, model_types=None):
 
     return models
 
+def load_ensemble_model(config_path, device):
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+
+    models_info = config['models']
+    ensemble = create_ensemble(models_info, device)
+    return ensemble
 
 def find_small_tumor_samples(val_loader, num_samples=5):
     """
@@ -389,18 +397,12 @@ def visualize_small_tumor_regions(samples, predictions, models_to_show=None, sav
 
 
 def main(args):
-    # Set device
+    """主函数"""
+    # 设置设备
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    print(f"使用设备: {device}")
 
-    # Load trained models
-    models = load_trained_models(args.models_dir, device, args.model_types)
-
-    if not models:
-        print("No models found")
-        return
-
-    # Prepare validation data loader
+    # 准备数据加载器
     val_transform = get_transforms('val', img_size=tuple(map(int, args.img_size.split(','))))
 
     val_dataset = LiTSDataset(
@@ -419,59 +421,118 @@ def main(args):
         num_workers=args.num_workers
     )
 
-    print(f"Validation set size: {len(val_dataset)} slices")
+    print(f"验证集大小: {len(val_dataset)} 切片")
 
-    # Find samples containing small tumors
-    small_tumor_samples = find_small_tumor_samples(val_loader, args.num_samples)
-
-    if not small_tumor_samples:
-        print("No samples containing small tumors found")
-        return
-
-    # Use all models to predict samples
-    predictions = predict_samples(models, small_tumor_samples, device)
-
-    # Set output directory
+    # 设置输出目录
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Visualize prediction results
+    # 加载所有普通模型
+    print("加载单一模型...")
+    models = load_trained_models(args.models_dir, device, args.model_types)
+
+    if not models:
+        print("未找到单一模型")
+        return
+
+    # 如果需要，也加载集成模型
+    if args.include_ensemble:
+        print("加载集成模型...")
+        from src.models.ensemble_model import create_ensemble
+
+        # 读取配置文件
+        ensemble_config_path = Path(args.ensemble_config)
+        if not ensemble_config_path.exists():
+            print(f"警告: 找不到集成模型配置文件 {ensemble_config_path}，将跳过集成模型")
+        else:
+            with open(ensemble_config_path, 'r') as f:
+                config = json.load(f)
+
+            ensemble = create_ensemble(config['models'], device)
+            ensemble.eval()
+
+            # 将集成模型添加到模型字典中
+            models['ensemble'] = ensemble
+            print("集成模型已加载")
+
+    # 找到包含小型肿瘤的样本
+    print("寻找包含小型肿瘤的样本...")
+    small_tumor_samples = find_small_tumor_samples(val_loader, args.num_samples)
+
+    if not small_tumor_samples:
+        print("未找到包含小型肿瘤的样本")
+        return
+
+    # 使用所有模型（包括集成模型）进行预测
+    print(f"使用 {len(models)} 个模型预测样本...")
+    predictions = {}
+
+    for model_name, model in models.items():
+        predictions[model_name] = {}
+        for i, sample in enumerate(small_tumor_samples):
+            image = sample['image'].unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                output = model(image)
+                if isinstance(output, tuple):  # 处理多输出模型
+                    output = output[0]
+                pred = torch.argmax(torch.softmax(output, dim=1), dim=1)[0].cpu().numpy()
+                predictions[model_name][i] = pred
+
+    # 可视化结果
+    print("生成可视化结果...")
+
+    # 确定需要展示的模型列表
+    models_to_show = list(models.keys())
+    if args.compare_best_only:
+        # 只比较表现最好的几个模型和集成模型
+        best_models = ['attention_local_contrast', 'attention_scale_aware_small', 'ensemble']
+        models_to_show = [m for m in best_models if m in models_to_show]
+
+    print(f"可视化以下模型的预测结果: {', '.join(models_to_show)}")
+
     visualize_predictions(
         small_tumor_samples,
         predictions,
-        models_to_show=args.model_types,
+        models_to_show=models_to_show,
         save_dir=output_dir / "full_predictions"
     )
 
-    # Visualize small tumor regions
     visualize_small_tumor_regions(
         small_tumor_samples,
         predictions,
-        models_to_show=args.model_types,
+        models_to_show=models_to_show,
         save_dir=output_dir / "small_tumor_regions"
     )
 
-    print(f"Visualization results saved to {output_dir}")
+    print(f"可视化结果已保存至: {output_dir}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Visualize model prediction results')
+    parser = argparse.ArgumentParser(description='可视化模型预测结果')
     parser.add_argument('--models_dir', type=str, default='results/models/attention',
-                        help='Model directory')
+                        help='模型目录')
     parser.add_argument('--data_dir', type=str, default='data/preprocessed',
-                        help='Preprocessed data directory')
+                        help='预处理数据目录')
     parser.add_argument('--output_dir', type=str, default='results/visualizations',
-                        help='Output directory')
+                        help='输出目录')
     parser.add_argument('--img_size', type=str, default='256,256',
-                        help='Image size, format "height,width"')
+                        help='图像大小，格式为"高,宽"')
     parser.add_argument('--batch_size', type=int, default=4,
-                        help='Batch size')
+                        help='批次大小')
     parser.add_argument('--num_workers', type=int, default=2,
-                        help='Number of data loader workers')
-    parser.add_argument('--num_samples', type=int, default=5,
-                        help='Number of samples to visualize')
+                        help='数据加载器工作进程数')
+    parser.add_argument('--num_samples', type=int, default=150,
+                        help='可视化样本数量')
     parser.add_argument('--model_types', nargs='+', default=None,
-                        help='Model types to include, if not specified, include all models')
+                        help='要包含的模型类型，如未指定，则包含所有模型')
+    parser.add_argument('--include_ensemble', action='store_true',
+                        help='包含集成模型进行对比')
+    parser.add_argument('--ensemble_config', type=str,
+                        default='results/models/ensemble/ensemble_config.json',
+                        help='集成模型配置文件路径')
+    parser.add_argument('--compare_best_only', action='store_true',
+                        help='只比较表现最好的几个模型和集成模型')
 
     args = parser.parse_args()
     main(args)
